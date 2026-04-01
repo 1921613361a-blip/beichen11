@@ -1,4 +1,4 @@
-name: Parse PDFs To Artifacts
+﻿name: Parse PDFs To Artifacts
 
 on:
   push:
@@ -31,20 +31,20 @@ jobs:
           python -m pip install -U pip
           python -m pip install -r requirements.txt
 
-      - name: Build changed PDF list
+      - name: Build PDF list
         id: pdfs
         shell: bash
         run: |
           set -e
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            git ls-files | grep -Ei '\.pdf$' > changed_pdfs.txt || true
+            git ls-files | grep -Ei '\.pdf$' > pdfs_to_parse.txt || true
           else
-            git diff --name-only HEAD^ HEAD | grep -Ei '\.pdf$' > changed_pdfs.txt || true
+            git diff --name-only HEAD^ HEAD | grep -Ei '\.pdf$' > pdfs_to_parse.txt || true
           fi
-          count=$(wc -l < changed_pdfs.txt | tr -d ' ')
+          count=$(wc -l < pdfs_to_parse.txt | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "Changed PDFs:"
-          cat changed_pdfs.txt || true
+          echo "PDF count: $count"
+          cat pdfs_to_parse.txt || true
 
       - name: Parse PDFs
         if: steps.pdfs.outputs.count != '0'
@@ -53,7 +53,7 @@ jobs:
           DEEPSEEK_BASE_URL: https://api.deepseek.com/v1
           DEEPSEEK_MODEL: deepseek-chat
         run: |
-          python pdf_pipeline.py --pdf-list-file changed_pdfs.txt --out-dir parsed_results
+          python pdf_pipeline.py --pdf-list-file pdfs_to_parse.txt --out-dir parsed_results
 
       - name: Upload parsed artifacts
         if: steps.pdfs.outputs.count != '0'
@@ -63,6 +63,6 @@ jobs:
           path: parsed_results
           retention-days: 14
 
-      - name: No PDF changed
+      - name: No PDF found
         if: steps.pdfs.outputs.count == '0'
-        run: echo "No changed PDF in this run."
+        run: echo "No PDF found."
