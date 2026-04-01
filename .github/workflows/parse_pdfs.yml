@@ -56,11 +56,14 @@ jobs:
           python pdf_pipeline.py --pdf-list-file pdfs_to_parse.txt --out-dir parsed_results
 
       - name: Upload parsed artifacts
-        if: steps.pdfs.outputs.count != '0'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: parsed_results_${{ github.run_number }}
-          path: parsed_results
+          path: |
+            parsed_results
+            pdfs_to_parse.txt
+          if-no-files-found: warn
           retention-days: 14
 
       - name: No PDF found
