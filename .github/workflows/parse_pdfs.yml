@@ -37,9 +37,9 @@ jobs:
         run: |
           set -e
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            git ls-files | grep -Ei '\.pdf$' > pdfs_to_parse.txt || true
+            git ls-files -- '*.pdf' '*.PDF' > pdfs_to_parse.txt
           else
-            git diff --name-only HEAD^ HEAD | grep -Ei '\.pdf$' > pdfs_to_parse.txt || true
+            git diff --name-only HEAD^ HEAD -- '*.pdf' '*.PDF' > pdfs_to_parse.txt
           fi
           count=$(wc -l < pdfs_to_parse.txt | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
