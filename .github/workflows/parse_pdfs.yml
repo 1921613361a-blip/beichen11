@@ -1,4 +1,4 @@
-﻿name: Parse PDFs To Artifacts
+name: Parse PDFs To Artifacts
 
 on:
   push:
@@ -18,8 +18,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
+
+      - name: Debug file list
+        run: |
+          echo "== repo files =="
+          ls -la
+          echo "== pdf files =="
+          find . -type f \( -iname "*.pdf" \) -print || true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -31,57 +36,13 @@ jobs:
           python -m pip install -U pip
           python -m pip install -r requirements.txt
 
-      - name: Build PDF list
-        id: pdfs
-        shell: bash
-        run: |
-          set -e
-          python - <<'PY'
-          import os
-          import subprocess
-          from pathlib import Path
-
-          out = Path("pdfs_to_parse.txt")
-          event = os.environ.get("GITHUB_EVENT_NAME", "").strip()
-
-          files = []
-          if event == "workflow_dispatch":
-              # 手动触发：全量扫描仓库
-              for p in Path(".").rglob("*"):
-                  if p.is_file() and p.suffix.lower() == ".pdf":
-                      files.append(str(p).replace("\\", "/").lstrip("./"))
-          else:
-              # push触发：仅扫描本次变更
-              r = subprocess.run(
-                  ["git", "diff", "--name-only", "HEAD^", "HEAD"],
-                  check=True,
-                  capture_output=True,
-                  text=True
-              )
-              for line in r.stdout.splitlines():
-                  s = line.strip()
-                  if s.lower().endswith(".pdf"):
-                      files.append(s)
-
-          files = sorted(set(files))
-          out.write_text("\n".join(files), encoding="utf-8")
-
-          print(f"PDF count: {len(files)}")
-          for f in files:
-              print(f)
-          PY
-
-          count=$(wc -l < pdfs_to_parse.txt | tr -d ' ')
-          # 处理空文件时wc仍可能为0，正常
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-      - name: Parse PDFs
-        if: steps.pdfs.outputs.count != '0'
+      - name: Parse PDFs (auto discover)
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK_BASE_URL: https://api.deepseek.com/v1
           DEEPSEEK_MODEL: deepseek-chat
         run: |
-          python pdf_pipeline.py --pdf-list-file pdfs_to_parse.txt --out-dir parsed_results
+          python pdf_pipeline.py --out-dir parsed_results
 
       - name: Upload parsed artifacts
         if: always()
@@ -90,10 +51,5 @@ jobs:
           name: parsed_results_${{ github.run_number }}
           path: |
             parsed_results
-            pdfs_to_parse.txt
           if-no-files-found: warn
           retention-days: 14
-
-      - name: No PDF found
-        if: steps.pdfs.outputs.count == '0'
-        run: echo "No PDF found."
