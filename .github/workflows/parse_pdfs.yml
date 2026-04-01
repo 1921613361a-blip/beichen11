@@ -36,16 +36,44 @@ jobs:
         shell: bash
         run: |
           set -e
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            find . -type f \( -iname "*.pdf" \) | sed 's#^\./##' > pdfs_to_parse.txt
-          else
-            git diff --name-only HEAD^ HEAD | awk 'BEGIN{IGNORECASE=1} /\.pdf$/ {print}' > pdfs_to_parse.txt
-          fi
-          count=$(wc -l < pdfs_to_parse.txt | tr -d ' ')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          echo "PDF count: $count"
-          cat pdfs_to_parse.txt || true
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
 
+          out = Path("pdfs_to_parse.txt")
+          event = os.environ.get("GITHUB_EVENT_NAME", "").strip()
+
+          files = []
+          if event == "workflow_dispatch":
+              # 手动触发：全量扫描仓库
+              for p in Path(".").rglob("*"):
+                  if p.is_file() and p.suffix.lower() == ".pdf":
+                      files.append(str(p).replace("\\", "/").lstrip("./"))
+          else:
+              # push触发：仅扫描本次变更
+              r = subprocess.run(
+                  ["git", "diff", "--name-only", "HEAD^", "HEAD"],
+                  check=True,
+                  capture_output=True,
+                  text=True
+              )
+              for line in r.stdout.splitlines():
+                  s = line.strip()
+                  if s.lower().endswith(".pdf"):
+                      files.append(s)
+
+          files = sorted(set(files))
+          out.write_text("\n".join(files), encoding="utf-8")
+
+          print(f"PDF count: {len(files)}")
+          for f in files:
+              print(f)
+          PY
+
+          count=$(wc -l < pdfs_to_parse.txt | tr -d ' ')
+          # 处理空文件时wc仍可能为0，正常
+          echo "count=$count" >> "$GITHUB_OUTPUT"
       - name: Parse PDFs
         if: steps.pdfs.outputs.count != '0'
         env:
